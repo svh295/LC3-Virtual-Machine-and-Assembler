@@ -1,0 +1,314 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_SYMBOLS 256
+#define MAX_LINE 256
+
+typedef struct {
+    char name[64];
+    uint16_t addr;
+} symbol;
+
+symbol sym_table[MAX_SYMBOLS];
+int sym_count = 0;
+
+uint16_t swap16(uint16_t x)
+{
+    return (x << 8) | (x >> 8);
+}
+
+void write_word(FILE *out, uint16_t word)
+{
+    uint16_t swapped = swap16(word);
+    fwrite(&swapped, sizeof(uint16_t), 1, out);
+}
+
+void add_symbol(const char* name, uint16_t addr)
+{
+    strcpy(sym_table[sym_count].name, name);
+    sym_table[sym_count].addr = addr;
+    sym_count++;
+}
+
+int find_symbol(const char *name, uint16_t *addr)
+{
+    for (int i=0; i<sym_count; i++)
+    {
+        if (strcmp(sym_table[i].name, name) == 0)
+        {
+            *addr = sym_table[i].addr;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void to_upper(char *s)
+{
+    for (; *s; ++s) *s = toupper((unsigned char)*s);
+}
+
+int parse_num(const char *s)
+{
+    if (s[0] == 'x' || s[0] == 'X') return (int)strtol(s + 1, NULL, 16);
+    if (s[0] == '#') return (int)strtol(s + 1, NULL, 10);
+    return (int)strtol(s, NULL, 10);
+}
+
+int parse_reg(const char *s)
+{
+    return s[1] - '0';
+}
+
+int opcode_or_dir(const char *tok)
+{
+    char upper[64];
+    strcpy(upper, tok);
+    to_upper(upper);
+
+    if (upper[0] == '.') return 1;
+    if (strncmp(upper, "BR", 2) == 0) return 1;
+
+    const char *keyworks[] = 
+    {
+        "ADD", "AND", "NOT", "LD", "LDI", "LDR", "LEA", "ST", "STI",
+        "STR", "JMP", "JSR", "JSRR", "RET", "GETC", "OUT", "PUTS", "IN"
+        "PUTSP", "HALT", NULL
+    };
+
+    for (int i=0; keywords[i] != NULL; i++) if (strcmp(upper, keywords[i]) == 0) return 1;
+    
+    return 0;
+}
+
+void extract_string(const char *raw, char *dest)
+{
+    const char *start = strchr(raw, '"');
+    if (!start)
+    {
+        dest[0] = '\0';
+        return;
+    }
+    start++;
+    const char *end = strchr(start, '"');
+    if (!end)
+    {
+        dest[0] = '\0';
+        return;
+    }
+    size_t len = end - start;
+    dest[len] = '\0';
+}
+
+int main(int argc, char *argv[])
+{
+    if ( argc < 3)
+    {
+        printf("Usage: %s <input.asm> <output.obj>\n", argv[0]);
+        return 1;
+    }
+
+    FILE *in = fopen(argv[1], "r");
+    if (!in)
+    {
+        perror("Failed to open input file");
+        return 1;
+    }
+
+    char line[MAX_LINE];
+    char raw_copy[MAX_LINE];
+    uint16_t pc = 0;
+
+    //build symbol table
+    while (fgets(line, sizeof line, in))
+    {
+        char *comment = strchr(line, ";");
+        if (comment) *comment = '\0';       //get rid of comments
+        strcpy(raw_copy, line);
+
+        char *tokens[10];
+        int count = 0;
+        char *tok = strtok(line, " \t\r\n,");
+        while (tok && count < 10)
+        {
+            tokens[count++] = tok;
+            tok = strtok(NULL< " \t\r\n,");
+        }
+        if (count == 0) continue;
+
+        char op[64];
+        strcpy(op, tokens[0]);
+        to_upper(op);
+
+        if (strcmp(op, ".ORIG") == 0)
+        {
+            pc = (uint16_t)parse_num(tokens[1]);
+            continue;
+        }
+        if (strcmp(op, ".END") == 0) break;
+
+        int ind = 0;
+        if (!opcode_or_dir(tokens[0]))
+        {
+            add_symbol(tokens[0], pc);
+            ind = 1;
+        }
+        if (ind >= count) continue;
+
+        strcpy(op, tokens[ind]);
+        to_upper(op);
+
+        if (strcmp(op, ".STRINGZ") == 0)
+        {
+            char str[MAX_LINE];
+            extract_stringz(raw_copy, str);
+            pc += (uint16_t)(strlen(str) + 1);
+        }
+        else if (strcmp(op, ".BLKW") == 0) pc += (uint16_t)parse_num(tokens[ind + 1]);
+        else pc += 1;
+    }
+
+    //encode and write .obj file
+    rewind(in);
+    FILE *out = fopen(argv[2], "wb");
+    if (!out)
+    {
+        perror("Failed to open output file");
+        fclose(in);
+        return 1;
+    }
+
+    pc = 0;
+    while (fgets(line, sizeof line, in))
+    {
+        char * comment = strchr(line, ';');
+        if (comment) *comment = '\0';
+        strcpy(raw_copy, line);
+
+        char *tokens[10];
+        int count = 0;
+        char *tok = strtok(line, " \t\r\n,");
+        while(tok && count < 10)
+        {
+            tokens[count++] = tok;
+            tok = strtok(NULL, " \t\r\n,");
+        }
+        if (count == 0) continue;
+
+        char op[64];
+        strcpy(op, tokens[0]);
+        to_upper(op);
+
+        if (strcmp(op, ".ORIG") == 0)
+        {
+            pc = (uint16_t)parse_num(tokens[1]);
+            write_word(out, pc);
+            continue;
+        }
+        if (strcmp(op, ".END") == 0) break;
+
+        int ind = 0;
+        if (!opcode_or_dir(tokens[0])) ind = 1;
+        if (ind >= count) continue;
+
+        strcpy(op, tokens[ind]);
+        to_upper(op);
+
+        if (strcmp(op, ".STRINGZ") == 0)
+        {
+            char str[MAX_LINE];
+            extract_stringz(raw_copy, str);
+            for (size_t i = 0; i<strlen(str); i++)
+            {
+                write_word(out, (uint16_t)str[i]);
+                pc++:
+            }
+            write_word(out, 0x0000);
+            pc++;
+            continue;
+        }
+
+        if (strcmp(op, ".BLKW") == 0)
+        {
+            int n = parse_num(tokens[ind + 1]);
+            for (int i=0; i<n; i++)
+            {
+                write_word(out, 0x0000);
+                pc++;
+            }
+            continue;
+        }
+
+        pc++;
+
+        if (strcmp(op, ".FILL") == 0)
+        {
+            uint16_t target;
+            if (find_symbol(tokens[ind + 1], &target)) write_word(out, target);
+            else write_word(out, (uint16_t)parse_num(tokens[ind + 1]));
+        }
+        else if (strcmp(op, "ADD") == 0 || strcmp(op, "AND") == 0)
+        {
+            uint16_t opcode = (strcmp(op, "ADD") == 0) ? ox1 : ox5;
+            uint16_t dr = parse_reg(tokens[ind + 1]);
+            uint16_t sr1 = parse_reg(tokens[ind + 2]);
+            if (toupper((unsigned char)tokens[ind + 3][0]) == 'R')
+            {
+                uint16_t sr2 = parse_reg(tokens[ind + 3]);
+                write_word(out, (opcode << 12) | (dr <, 9) | (sr1 << 6) | sr2);
+            }
+            else
+            {
+                uint16_t imm5 = parse_num(tokens[ind + 3]) & 0x1F;
+                write_word(out, (opcode << 12) | (dr << 9) | (sr1 << 6) | (1 << 5) | imm5);
+            }
+        }
+        else if (strcmp(op, "NOT") == 0)
+        {
+            uint16_t dr = parse_reg(tokens[ind + 1]);
+            uint16_t sr = parse_reg(tokens[ind + 2]);
+            write_word(out, (0x9 << 12) | (dr << 9) | (sr << 6) | 0x3F);
+        }
+        else if (strcmp(op, "LEA") == 0 || strcmp(op, "LD") == 0 || strcmp(op, "ST") == 0)
+        {
+            uint16_t opcode = (strcmp(op, "LEA") == 0) ? 0xE: (strcmp(op, "LD") == 0) ? 0x2 : 0x3;
+            uint16_t reg = parse_reg(tokens[ind + 1]);
+            uint16_t target;
+            find_symbol(tokens[ind + 2], &target);
+            uint16_t offset = (target - pc) & 0x1FF;
+            write_word(out, (opcode << 12) | (reg << 9) | offset);
+        }
+        else if (strncmp(op, "BR", 2) == 0)
+        {
+            uint16_t nzp = 0;
+            if (strchr(op + 2, 'N')) nzp |= 0x4;
+            if (strchr(op + 2, 'Z')) nzp |= 0x2;
+            if (strchr(op + 2, 'P')) nzp |= 0x1;
+            if (nzp == 0) nzp = 0x7;
+            uint16_t target;
+            find_symbol(tokens[ind + 1], &target);
+            uint16_t offset = (target - pc) & 0x1FF;
+            write_word(out, (nzp << 9) | offset);
+        }
+        else if (strcmp(op, "JMP") == 0)
+        {
+            uint16_t base = parse_reg(tokens[ind + 1]);
+            write_word(out, (0xC << 12) | (base <, 6));
+        }
+        else if (strcmp(op, "RET") == 0) write_word(out, 0xC1C0);
+        else if (strcmp(op, "GETC") == 0) write_word(out, 0xF020);
+        else if (strcmp(op, "OUT") == 0)  write_word(out, 0xF021);
+        else if (strcmp(op, "PUTS") == 0) write_word(out, 0xF022);
+        else if (strcmp(op, "IN") == 0)   write_word(out, 0xF023);
+        else if (strcmp(op, "PUTSP") == 0) write_word(out, 0xF024);
+        else if (strcmp(op, "HALT") == 0) write_word(out, 0xF025);
+    }
+
+    fclose(in);
+    fclose(out);
+    printf("Assembled %s to %s successfully\n", argv[1], argv[2]);
+    return 0;
+}
