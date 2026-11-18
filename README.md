@@ -16,3 +16,6 @@ The assembler use is: ./assembler <.asm file> <.obj file>
 The simulator loads LC3 object files into simulated memory and executes the encoded instructions.
 
 The virtual machine's use is: ./LC3 <.obj file>
+
+# Instruction Set
+currently implemented: ADD, AND, NOT, LEA, BR, JMP
