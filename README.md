@@ -21,8 +21,4 @@ The virtual machine's use is: ./LC3 <.obj file>
 currently implemented: ADD, AND, NOT, LEA, BR, JMP, LDI, STI, LDR, STR, JSR, JSRR, and TRAP
 
 # Specifications
-word size = 2 bytes (16 bits), 
-addressable memory = 65,536 words, 
-total addressable memory = 128 KB, 
-general purpose registers = 8, 
-program counter = 16 bits
+word size = 2 bytes (16 bits) | addressable memory = 65,536 words | total addressable memory = 128 KB | general purpose registers = 8 |program counter = 16 bits
