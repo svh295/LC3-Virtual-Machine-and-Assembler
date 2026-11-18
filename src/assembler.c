@@ -84,7 +84,7 @@ int opcode_or_dir(const char *tok)
     {
         "ADD", "AND", "NOT", "LD", "LDI", "LDR", "LEA", "ST", "STI",
         "STR", "JMP", "JSR", "JSRR", "RET", "GETC", "OUT", "PUTS", "IN",
-        "PUTSP", "HALT", NULL
+        "PUTSP", "HALT", "TRAP", NULL
     };
 
     for (int i=0; keywords[i] != NULL; i++) if (strcmp(upper, keywords[i]) == 0) return 1;
@@ -111,6 +111,22 @@ void extract_string(const char *raw, char *dest)
 
     memcpy(dest, start, len);
     dest[len] = '\0';
+}
+
+//calculates distance between PC and address of start
+int get_pc_offset(uint16_t target, uint16_t pc, int bits)
+{
+    int offset = (int)target - (int)pc;
+
+    int min = -(1 << (bits - 1));
+    int max = (1 << (bits - 1)) - 1;
+
+    if (offset < min || offset > max)
+    {
+        printf("Error: PC-relative offset out of range\n");
+        return -1;
+    }
+    return offset & ((1 << bits) - 1);
 }
 
 int main(int argc, char *argv[])
@@ -181,7 +197,7 @@ int main(int argc, char *argv[])
         else pc += 1;
     }
 
-    //encode and write .obj file
+    //encode and write .obj file (second pass)
     rewind(in);
     FILE *out = fopen(argv[2], "wb");
     if (!out)
@@ -307,6 +323,89 @@ int main(int argc, char *argv[])
         {
             uint16_t base = parse_reg(tokens[ind + 1]);
             write_word(out, (0xC << 12) | (base << 6));
+        }
+        else if (strcmp(op, "LDI") == 0)
+        {
+            uint16_t dr = parse_reg(tokens[ind + 1]);
+            uint16_t target;
+
+            if (!find_symbol(tokens[ind + 2], &target))
+            {
+                printf("Error: Undefined label %s\n", tokens[ind + 2]);
+                return 1;
+            }
+
+            uint16_t offset = get_pc_offset(target, pc, 9);
+            if (offset < 0) return 1;
+            write_word(out, (0xA << 12) | (dr << 9) | offset);
+        }
+        else if (strcmp(op, "STI") == 0)
+        {
+            uint16_t sr = parse_reg(tokens[ind + 1]);
+            uint16_t target;
+
+            if (!find_symbol(tokens[ind +2], &target))
+            {
+                printf("Error: Undefined label %s\n", tokens[ind + 2]);
+                return 1;
+            }
+
+            uint16_t offset = get_pc_offset(target, pc, 9);
+            if (offset < 0) return 1;
+            write_word(out, (0xB << 12) | (sr << 9) | offset);
+        }
+        else if (strcmp(op, "LDR") == 0)    //load register
+        {
+            uint16_t dr = parse_reg(tokens[ind + 1]);
+            uint16_t base = parse_reg(tokens[ind+2]);
+            int offset = parse_num(tokens[ind+3]);
+            if (offset < -32 || offset > 31)
+            {
+                printf("Error: LDR offset out of range");
+                return 1;
+            }
+            uint16_t offset6 = offset & 0x3F;
+            write_word(out, (0x6 << 12) | (dr << 9) | (base << 6) | offset6);
+        }
+        else if (strcmp(op, "STR") == 0)    //store register
+        {
+            uint16_t sr = parse_reg(tokens[ind+1]);
+            uint16_t base = parse_reg(tokens[ind+2]);
+            int offset = parse_num(tokens[ind + 3]);
+            if (offset < -32 || offset > 31)
+            {
+                printf("Error: STR offset out of range");
+                return 1;
+            }
+            uint16_t offset6 = offset & 0x3F;
+            write_word(out, (0x7 << 12) | (sr << 9) | (base << 6) | offset6);
+        }
+        else if (strcmp(op, "JSR") == 0)    //jump to subroutine
+        {
+            uint16_t target;
+            if (!find_symbol(tokens[ind+1], &target))
+            {
+                printf("Error: Undefined label %s\n", tokens[ind+1]);
+                return 1;
+            }
+            uint16_t offset = get_pc_offset(target, pc, 11);
+            if (offset < 0) return 1;
+            write_word(out, (0x4 << 12) | (1 << 11) | offset);
+        }
+        else if (strcmp(op, "JSRR") == 0)   //jump to subroutine using a register
+        {
+            uint16_t base = parse_reg(tokens[ind+1]);
+            write_word(out, (0x4 << 12) | (base << 6));
+        }
+        else if (strcmp(op, "TRAP") == 0)   //general trap
+        {
+            int trapvect = parse_num(tokens[ind + 1]);
+            if (trapvect < 0 || trapvect > 255)
+            {
+                printf("Error: Invalid trap vector\n");
+                return 1;
+            }
+            write_word(out, (0xF << 12) | (trapvect & 0xFF));
         }
         else if (strcmp(op, "RET") == 0) write_word(out, 0xC1C0);
         else if (strcmp(op, "GETC") == 0) write_word(out, 0xF020);
