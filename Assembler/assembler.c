@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 
+//limits
 #define MAX_SYMBOLS 256
 #define MAX_LINE 256
 
@@ -15,17 +16,20 @@ typedef struct {
 symbol sym_table[MAX_SYMBOLS];
 int sym_count = 0;
 
+//swaps 2 bytes of 16 bit number
 uint16_t swap16(uint16_t x)
 {
     return (x << 8) | (x >> 8);
 }
 
+//writes to output file
 void write_word(FILE *out, uint16_t word)
 {
     uint16_t swapped = swap16(word);
     fwrite(&swapped, sizeof(uint16_t), 1, out);
 }
 
+//add symbol to symbol table
 void add_symbol(const char* name, uint16_t addr)
 {
     strcpy(sym_table[sym_count].name, name);
@@ -33,6 +37,7 @@ void add_symbol(const char* name, uint16_t addr)
     sym_count++;
 }
 
+//searches symbol table to find a label
 int find_symbol(const char *name, uint16_t *addr)
 {
     for (int i=0; i<sym_count; i++)
@@ -51,6 +56,7 @@ void to_upper(char *s)
     for (; *s; ++s) *s = toupper((unsigned char)*s);
 }
 
+//converts numbers from assembly to C integers
 int parse_num(const char *s)
 {
     if (s[0] == 'x' || s[0] == 'X') return (int)strtol(s + 1, NULL, 16);
@@ -58,11 +64,13 @@ int parse_num(const char *s)
     return (int)strtol(s, NULL, 10);
 }
 
+//extracts register number from assembly register
 int parse_reg(const char *s)
 {
     return s[1] - '0';
 }
 
+//determines whether the first token in line is an instruction or an assembler directive
 int opcode_or_dir(const char *tok)
 {
     char upper[64];
@@ -72,10 +80,10 @@ int opcode_or_dir(const char *tok)
     if (upper[0] == '.') return 1;
     if (strncmp(upper, "BR", 2) == 0) return 1;
 
-    const char *keyworks[] = 
+    const char *keywords[] = 
     {
         "ADD", "AND", "NOT", "LD", "LDI", "LDR", "LEA", "ST", "STI",
-        "STR", "JMP", "JSR", "JSRR", "RET", "GETC", "OUT", "PUTS", "IN"
+        "STR", "JMP", "JSR", "JSRR", "RET", "GETC", "OUT", "PUTS", "IN",
         "PUTSP", "HALT", NULL
     };
 
@@ -100,6 +108,8 @@ void extract_string(const char *raw, char *dest)
         return;
     }
     size_t len = end - start;
+
+    memcpy(dest, start, len);
     dest[len] = '\0';
 }
 
@@ -125,17 +135,17 @@ int main(int argc, char *argv[])
     //build symbol table
     while (fgets(line, sizeof line, in))
     {
-        char *comment = strchr(line, ";");
+        char *comment = strchr(line, ';');
         if (comment) *comment = '\0';       //get rid of comments
         strcpy(raw_copy, line);
 
         char *tokens[10];
         int count = 0;
-        char *tok = strtok(line, " \t\r\n,");
+        char *tok = strtok(line, " \t\r\n,");   //tokenize the line (seperate into individual tokens)
         while (tok && count < 10)
         {
             tokens[count++] = tok;
-            tok = strtok(NULL< " \t\r\n,");
+            tok = strtok(NULL, " \t\r\n,");
         }
         if (count == 0) continue;
 
@@ -143,14 +153,14 @@ int main(int argc, char *argv[])
         strcpy(op, tokens[0]);
         to_upper(op);
 
-        if (strcmp(op, ".ORIG") == 0)
+        if (strcmp(op, ".ORIG") == 0)       //handle orgi (specifies where program starts)
         {
             pc = (uint16_t)parse_num(tokens[1]);
             continue;
         }
-        if (strcmp(op, ".END") == 0) break;
+        if (strcmp(op, ".END") == 0) break;     //handle end (specifies progra end)
 
-        int ind = 0;
+        int ind = 0;        //identify labels
         if (!opcode_or_dir(tokens[0]))
         {
             add_symbol(tokens[0], pc);
@@ -161,10 +171,10 @@ int main(int argc, char *argv[])
         strcpy(op, tokens[ind]);
         to_upper(op);
 
-        if (strcmp(op, ".STRINGZ") == 0)
+        if (strcmp(op, ".STRINGZ") == 0)    //update counter
         {
             char str[MAX_LINE];
-            extract_stringz(raw_copy, str);
+            extract_string(raw_copy, str);
             pc += (uint16_t)(strlen(str) + 1);
         }
         else if (strcmp(op, ".BLKW") == 0) pc += (uint16_t)parse_num(tokens[ind + 1]);
@@ -220,11 +230,11 @@ int main(int argc, char *argv[])
         if (strcmp(op, ".STRINGZ") == 0)
         {
             char str[MAX_LINE];
-            extract_stringz(raw_copy, str);
+            extract_string(raw_copy, str);
             for (size_t i = 0; i<strlen(str); i++)
             {
                 write_word(out, (uint16_t)str[i]);
-                pc++:
+                pc++;
             }
             write_word(out, 0x0000);
             pc++;
@@ -252,13 +262,13 @@ int main(int argc, char *argv[])
         }
         else if (strcmp(op, "ADD") == 0 || strcmp(op, "AND") == 0)
         {
-            uint16_t opcode = (strcmp(op, "ADD") == 0) ? ox1 : ox5;
+            uint16_t opcode = (strcmp(op, "ADD") == 0) ? 0x1 : 0x5;
             uint16_t dr = parse_reg(tokens[ind + 1]);
             uint16_t sr1 = parse_reg(tokens[ind + 2]);
             if (toupper((unsigned char)tokens[ind + 3][0]) == 'R')
             {
                 uint16_t sr2 = parse_reg(tokens[ind + 3]);
-                write_word(out, (opcode << 12) | (dr <, 9) | (sr1 << 6) | sr2);
+                write_word(out, (opcode << 12) | (dr << 9) | (sr1 << 6) | sr2);
             }
             else
             {
@@ -296,7 +306,7 @@ int main(int argc, char *argv[])
         else if (strcmp(op, "JMP") == 0)
         {
             uint16_t base = parse_reg(tokens[ind + 1]);
-            write_word(out, (0xC << 12) | (base <, 6));
+            write_word(out, (0xC << 12) | (base << 6));
         }
         else if (strcmp(op, "RET") == 0) write_word(out, 0xC1C0);
         else if (strcmp(op, "GETC") == 0) write_word(out, 0xF020);
