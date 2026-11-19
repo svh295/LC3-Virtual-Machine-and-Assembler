@@ -55,8 +55,8 @@ enum
     R_R5,
     R_R6,
     R_R7,
-    R_PC,   //program counter
-    R_COND,
+    R_PC,   //program counter (tracks cpu location in program)
+    R_COND, //condition code register (tracks sign of last result as P (+), N (-), or Z (zero)
     R_COUNT
 };
 
