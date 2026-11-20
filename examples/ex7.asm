@@ -38,3 +38,5 @@ DoubleValue
     Result .BLKW 1
 
 .END
+
+; RET must be last line of the subroutine and doesnt allow any values
