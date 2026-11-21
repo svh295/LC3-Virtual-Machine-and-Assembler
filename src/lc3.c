@@ -148,6 +148,9 @@ int main(int argc, const char* argv[])
         uint16_t instr = mem_read(reg[R_PC]++);
         uint16_t op = instr >> 12;
 
+        //temp debugging
+        //printf("PC: x%04X | Instruction: x%04X | Opcode: x%X | R0: x%04X\n", reg[R_PC] - 1, instr, op, reg[R_R0]);
+
         switch (op)
         {
             case OP_ADD:
@@ -330,6 +333,12 @@ int main(int argc, const char* argv[])
                     case TRAP_PUTSP:
                     {
                         uint16_t* c = memory + reg[R_R0];
+
+                        //temp debugging
+                        //uint16_t address = reg[R_R0];
+                        //printf("\nPUTSP | R0: x%04X\n", address);
+                        //for (int i=0; i<6; i++) printf("Memory[x%04X]: x%04X\n", (uint16_t)(address + i), memory[(uint16_t)(address + i)]);
+
                         while(*c)
                         {
                             char char1 = (*c) & 0xFF;

@@ -27,3 +27,4 @@ word size = 2 bytes (16 bits) | addressable memory = 65,536 words | total addres
 
 # Resources
 https://cs131.info/
+https://www.jmeiners.com/lc3-vm/#:lc3.c_2 

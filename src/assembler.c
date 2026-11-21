@@ -179,7 +179,11 @@ int main(int argc, char *argv[])
         int ind = 0;        //identify labels
         if (!opcode_or_dir(tokens[0]))
         {
-            add_symbol(tokens[0], pc);
+            char label[64];
+            strcpy(label, tokens[0]);
+            size_t len = strlen(label);
+            if (len > 0 && label[len - 1] == ':') label[len - 1] = '\0';
+            add_symbol(label, pc);
             ind = 1;
         }
         if (ind >= count) continue;
@@ -298,7 +302,7 @@ int main(int argc, char *argv[])
             uint16_t sr = parse_reg(tokens[ind + 2]);
             write_word(out, (0x9 << 12) | (dr << 9) | (sr << 6) | 0x3F);
         }
-        else if (strcmp(op, "LEA") == 0 || strcmp(op, "LD") == 0 || strcmp(op, "ST") == 0)
+        else if (strcmp(op, "LEA") == 0 || strcmp(op, "LD") == 0 || strcmp(op, "ST") == 0) //LEA is load effective address
         {
             uint16_t opcode = (strcmp(op, "LEA") == 0) ? 0xE: (strcmp(op, "LD") == 0) ? 0x2 : 0x3;
             uint16_t reg = parse_reg(tokens[ind + 1]);
@@ -306,6 +310,8 @@ int main(int argc, char *argv[])
             find_symbol(tokens[ind + 2], &target);
             uint16_t offset = (target - pc) & 0x1FF;
             write_word(out, (opcode << 12) | (reg << 9) | offset);
+            //temp debugging
+            printf("LEA Label: %s | Target: x%04X | PC: x%04X\n", tokens[ind + 2], target, pc);
         }
         else if (strncmp(op, "BR", 2) == 0)
         {
@@ -367,7 +373,7 @@ int main(int argc, char *argv[])
             uint16_t offset6 = offset & 0x3F;
             write_word(out, (0x6 << 12) | (dr << 9) | (base << 6) | offset6);
         }
-        else if (strcmp(op, "STR") == 0)    //store register
+        else if (strcmp(op, "STR") == 0)    //store relative
         {
             uint16_t sr = parse_reg(tokens[ind+1]);
             uint16_t base = parse_reg(tokens[ind+2]);
@@ -400,6 +406,10 @@ int main(int argc, char *argv[])
         else if (strcmp(op, "TRAP") == 0)   //general trap
         {
             int trapvect = parse_num(tokens[ind + 1]);
+
+            //temp debugging
+            //printf("TRAP detected: %s | Vector: x%02X\n", tokens[ind + 1], trapvect);
+
             if (trapvect < 0 || trapvect > 255)
             {
                 printf("Error: Invalid trap vector\n");
