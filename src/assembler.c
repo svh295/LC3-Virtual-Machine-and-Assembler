@@ -292,8 +292,15 @@ int main(int argc, char *argv[])
             }
             else
             {
-                uint16_t imm5 = parse_num(tokens[ind + 3]) & 0x1F;
-                write_word(out, (opcode << 12) | (dr << 9) | (sr1 << 6) | (1 << 5) | imm5);
+                //uint16_t imm5 = parse_num(tokens[ind + 3]) & 0x1F;
+                int imm5 = parse_num(tokens[ind + 3]);
+                if (imm5 < -16 || imm5 > 16)
+                {
+                    printf("Error: ADD/AND immediate out of range: %d", imm5);
+                    return 1;
+                }
+                uint16_t encoded_imm5 = imm5 & 0x1F;
+                write_word(out, (opcode << 12) | (dr << 9) | (sr1 << 6) | (1 << 5) | encoded_imm5);
             }
         }
         else if (strcmp(op, "NOT") == 0)

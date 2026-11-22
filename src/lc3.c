@@ -305,6 +305,10 @@ int main(int argc, const char* argv[])
                     }
                     case TRAP_OUT:
                     {
+                        //temp debug
+                        //printf("\nR0 decimal: %d\n", reg[R_R0]);
+                        //printf("R0 hex: x%04X\n", reg[R_R0]);
+
                         putc((char)reg[R_R0], stdout);
                         fflush(stdout);
                         break;
