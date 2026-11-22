@@ -195,7 +195,14 @@ int main(int argc, char *argv[])
         {
             char str[MAX_LINE];
             extract_string(raw_copy, str);
-            pc += (uint16_t)(strlen(str) + 1);
+            int length = 0;
+
+            for (size_t i=0; i<strlen(str); i++)
+            {
+                if (str[i] == '\\' && str[i+1] == 'n') i++;
+                length++;
+            }
+            pc += (uint16_t)(length + 1);
         }
         else if (strcmp(op, ".BLKW") == 0) pc += (uint16_t)parse_num(tokens[ind + 1]);
         else pc += 1;
@@ -251,11 +258,21 @@ int main(int argc, char *argv[])
         {
             char str[MAX_LINE];
             extract_string(raw_copy, str);
+
+            //added checking for newline
             for (size_t i = 0; i<strlen(str); i++)
             {
-                write_word(out, (uint16_t)str[i]);
+                //temp debugging
+                //printf("Writing Character: %c | Hex: x%04X\n", str[i], (unsigned char)str[i]);
+                if (str[i] == '\\' && str[i+1] == 'n')
+                {
+                    write_word(out, 0x000A);
+                    i++;
+                }
+                else write_word(out, (uint16_t)str[i]);
                 pc++;
             }
+
             write_word(out, 0x0000);
             pc++;
             continue;
@@ -294,7 +311,7 @@ int main(int argc, char *argv[])
             {
                 //uint16_t imm5 = parse_num(tokens[ind + 3]) & 0x1F;
                 int imm5 = parse_num(tokens[ind + 3]);
-                if (imm5 < -16 || imm5 > 16)
+                if (imm5 < -16 || imm5 > 15)
                 {
                     printf("Error: ADD/AND immediate out of range: %d", imm5);
                     return 1;
@@ -314,11 +331,16 @@ int main(int argc, char *argv[])
             uint16_t opcode = (strcmp(op, "LEA") == 0) ? 0xE: (strcmp(op, "LD") == 0) ? 0x2 : 0x3;
             uint16_t reg = parse_reg(tokens[ind + 1]);
             uint16_t target;
-            find_symbol(tokens[ind + 2], &target);
-            uint16_t offset = (target - pc) & 0x1FF;
+            if (!find_symbol(tokens[ind + 2], &target))
+            {
+                printf("Error: Undefined Label %s\n", tokens[ind + 2]);
+                return 1;
+            }
+            int offset = get_pc_offset(target, pc, 9);
+            if (offset < 0) return 1;
             write_word(out, (opcode << 12) | (reg << 9) | offset);
             //temp debugging
-            printf("LEA Label: %s | Target: x%04X | PC: x%04X\n", tokens[ind + 2], target, pc);
+            //printf("LEA Label: %s | Target: x%04X | PC: x%04X\n", tokens[ind + 2], target, pc);
         }
         else if (strncmp(op, "BR", 2) == 0)
         {
@@ -328,8 +350,13 @@ int main(int argc, char *argv[])
             if (strchr(op + 2, 'P')) nzp |= 0x1;
             if (nzp == 0) nzp = 0x7;
             uint16_t target;
-            find_symbol(tokens[ind + 1], &target);
-            uint16_t offset = (target - pc) & 0x1FF;
+            if (!find_symbol(tokens[ind + 1], &target))
+            {
+                printf("Error: Undefined label %s\n", tokens[ind + 1]);
+                return 1;
+            }
+            int offset = get_pc_offset(target, pc, 9);
+            if (offset < 0) return 1;
             write_word(out, (nzp << 9) | offset);
         }
         else if (strcmp(op, "JMP") == 0)

@@ -266,6 +266,8 @@ int main(int argc, const char* argv[])
                 uint16_t pc_offset = sign_extend(instr & 0x1FF, 9);
                 reg[r0] = reg[R_PC] + pc_offset;
 
+                //temp debugging
+                //printf("LEA | PC: x%04X | Offset: x%04X | Result: x%04X\n", reg[R_PC], pc_offset, reg[r0]);
                 update_flags(r0);
                 break;
             }
@@ -316,6 +318,9 @@ int main(int argc, const char* argv[])
                     case TRAP_PUTS:
                     {
                         uint16_t* c = memory + reg[R_R0];
+                        //temp debugging
+                        //printf("\n PUTS start address: x%04X\n", reg[R_R0]);
+                        //for (int i=0; i<12; i++) printf("Memory[x%04X] = x%04X\n", (uint16_t)(reg[R_R0] + i), memory[(uint16_t)(reg[R_R0] + i)]);
                         while (*c)
                         {
                             putc((char)*c, stdout);
