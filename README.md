@@ -6,7 +6,7 @@ and an assembler to create codes to run inside the virtual machine.
 The purpose of this project was to learn how assembly languages, instruction encoding, memory, and CPU 
 execution work on a low level, as an introduction to computer architecture.
 
-Currently still in progress
+Examples and debugging still in progress.
 
 # Assembler
 The assembler converts LC3 assembly source files (.asm) into binary object files (.obj).
